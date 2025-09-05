@@ -129,17 +129,24 @@ class Attention(nn.Module):
             cos, sin = cos_sin
             query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
-        # flash attn
+        # flash attn / SDPA
         if flash_attn_func is not None:
+            # FlashAttention expects [B, S, H, D] and returns [B, S, H, D]
             attn_output = flash_attn_func(q=query, k=key, v=value, causal=self.causal)
         else:
-            attn_output = F.scaled_dot_product_attention(query, key, value, is_causal=self.causal)
+            # PyTorch SDPA expects [B, H, S, D] and returns [B, H, S, D]
+            q = query.permute(0, 2, 1, 3)
+            k = key.permute(0, 2, 1, 3)
+            v = value.permute(0, 2, 1, 3)
+            attn_output = F.scaled_dot_product_attention(q, k, v, is_causal=self.causal)
+            # Convert back to [B, S, H, D] for a unified downstream path
+            attn_output = attn_output.permute(0, 2, 1, 3).contiguous()
 
         if isinstance(attn_output, tuple):  # fa2 and fa3 compatibility
             attn_output = attn_output[0]
 
-        # attn_output: [batch_size, num_heads, seq_len, head_dim]
-        attn_output = attn_output.view(batch_size, seq_len, self.output_size)  # type: ignore
+        # attn_output: [batch_size, seq_len, num_heads, head_dim]
+        attn_output = attn_output.reshape(batch_size, seq_len, self.output_size)  # type: ignore
         return self.o_proj(attn_output)
 
 

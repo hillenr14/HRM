@@ -54,7 +54,7 @@ class HierarchicalReasoningModel_ACTV1Config(BaseModel):
     halt_max_steps: int
     halt_exploration_prob: float
 
-    forward_dtype: str = "bfloat16"
+    forward_dtype: str = "float16"
 
 
 class HierarchicalReasoningModel_ACTV1Block(nn.Module):
